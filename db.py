@@ -1,7 +1,10 @@
+import subprocess
+
 import asyncpg
 from flask import Flask
 from select import select
 from peewee import PostgresqlDatabase
+import yadisk
 
 db = PostgresqlDatabase(user="postgres",
                         password="ruslan46576",
@@ -18,6 +21,19 @@ async def create_db_connection():
         port=5432,
         database='busstation'
     )
+
+
+# Асинхронная функция для создания резервной копии и загрузки на Яндекс.Диск
+async def upload_backup():
+    # Создание резервной копии базы данных с помощью pg_dump
+    # pg_dump_command = r".\pg_dump -U postgres -h localhost -p 5432 -d busstation > C:\Python\BotTG\backup.sql"
+    # subprocess.run(pg_dump_command, shell=True)
+    # Загрузка резервной копии на Яндекс Диск
+    y = yadisk.YaDisk(token="y0_AgAAAABiz3zyAAsNUgAAAAD2BjgOVV6V1ZQlTjmy8lazg5ZPUOZ-OOQ")
+    if y.exists(f"/backup.sql"):
+        y.remove(f"/backup.sql")
+
+    y.upload("backup.sql", f"/backup.sql")
 
 
 # Регистрация пользователя

@@ -28,13 +28,14 @@ class ByTicket(StatesGroup):
 class DeleteBy(StatesGroup):
     id = State()
 
+
 # Стартовая функция
 @dp.message_handler(commands=['start'])
 async def cmd_start(message: types.Message):
     # Добавление пользователя в БД
-    user = md.Users.get_or_none(user_id = message.from_user.id)
+    user = md.Users.get_or_none(user_id=message.from_user.id)
     if not user:
-        user_new = md.Users.create(user_id = message.from_user.id, name = message.from_user.first_name)
+        user_new = md.Users.create(user_id=message.from_user.id, name=message.from_user.first_name)
         user_new.save()
     await message.answer(f'{message.from_user.first_name}, добро пожаловать в Белгородский автовокзал!',
                          reply_markup=kb.main)
@@ -57,16 +58,16 @@ async def add_by_history(call: types.CallbackQuery):
     user_id = call.from_user.id
     connection = await db.create_db_connection()
     # Извлекаем name автобуса по его ID
-    bus = md.Buses.get_or_none(id = bus_id)
+    bus = md.Buses.get_or_none(id=bus_id)
     # Извлекаем ID покупки, если пользователь уже покупал билет на этот рейс
-    by_ticket = md.History.get_or_none(user_id = user_id, bus_name = bus.coming, date_travel = data)
+    by_ticket = md.History.get_or_none(user_id=user_id, bus_name=bus.coming, date_travel=data)
     # Проверка на наличие билета на этот рейс (у пользователя может быть куплен только один билет на определенный рейс)
     if by_ticket:
         await call.message.answer("У вас уже куплен билет на этот рейс")
     # Если у пользователя нет билета на этот рейс
     else:
         # Считаем место пользователя
-        count_places = md.Schedule.get_or_none(id = schedule_id)
+        count_places = md.Schedule.get_or_none(id=schedule_id)
         place = 51 - count_places.places
         # Если его место получилось больше, чем количество мест в автобусе, то свободных мест нет
         if place <= 50:
@@ -216,7 +217,7 @@ async def process_delete_by_id(message: types.Message, state: FSMContext):
     # Проверка на то, что пользователь является админом
     if message.from_user.id == int(ADMIN_ID):
         name = message.text
-        bus = md.Buses.get_or_none(coming = name)
+        bus = md.Buses.get_or_none(coming=name)
         # Проверка есть ли автобус с таким ID
         if bus:
             md.Schedule.delete().where(md.Schedule.bus_id == bus.id)
@@ -256,17 +257,17 @@ async def add_item_type(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         data['price'] = int(message.text)
 
-        new = md.Buses(coming = data['coming'], price= data['price'])
+        new = md.Buses(coming=data['coming'], price=data['price'])
         new.save()
 
     connection = await db.create_db_connection()
     # Извлекаем ID нового автобуса
-    bus_id = md.Buses.get_or_none(coming = data['coming'])
+    bus_id = md.Buses.get_or_none(coming=data['coming'])
     # Создаем рейсы на каждую дату
     for i in range(1, 11):
         # Заполняем дату нужного рейса
         if i < 10:
-            date = md.Schedule(data = f"2024/01/0{i}", bus_id = bus_id)
+            date = md.Schedule(data=f"2024/01/0{i}", bus_id=bus_id)
         else:
             date = md.Schedule(data=f"2024/01/{i}", bus_id=bus_id)
         date.save()
@@ -312,6 +313,17 @@ async def import_to(message: types.Message):
 
     else:
         await message.reply('У Вас недостаточно прав')
+
+
+@dp.message_handler(text='Загрузить на Яндекс Диск')
+async def handle_backup_command(message: types.Message):
+    if message.from_user.id == int(ADMIN_ID):
+        # Вызов функции создания резервной копии с передачей объекта сообщения
+        await db.upload_backup()
+        await message.answer("Успешно")
+    else:
+        await message.reply('У Вас недостаточно прав')
+
 
 # Если пользователь ввел не команду
 @dp.message_handler()
