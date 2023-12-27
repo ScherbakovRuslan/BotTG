@@ -1,3 +1,4 @@
+import yadisk
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher.filters.state import State, StatesGroup
@@ -9,13 +10,15 @@ from config import ADMIN_ID, BOT_TOKEN
 import pandas as pd
 from docx import Document
 import os
+import subprocess
+import asyncio
 
 storage = MemoryStorage()
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher(bot=bot, storage=storage)
 
 
-class NewOrder(StatesGroup):
+class NewBus(StatesGroup):
     coming = State()
     price = State()
 
@@ -25,8 +28,8 @@ class ByTicket(StatesGroup):
     place = State()
 
 
-class DeleteBy(StatesGroup):
-    id = State()
+class DeleteBus(StatesGroup):
+    coming = State()
 
 
 # Стартовая функция
@@ -206,13 +209,13 @@ async def contacts(message: types.Message):
 async def delete_by_id(message: types.Message):
     if message.from_user.id == int(ADMIN_ID):
         await message.answer('Введите прибытие автобуса, который необходимо удалить')
-        await DeleteBy.id.set()
+        await DeleteBus.coming.set()
     else:
         await message.reply('У вас нет прав для выполнения этой команды.')
 
 
 # Удаление автобуса
-@dp.message_handler(state=DeleteBy.id)
+@dp.message_handler(state=DeleteBus.coming)
 async def process_delete_by_id(message: types.Message, state: FSMContext):
     # Проверка на то, что пользователь является админом
     if message.from_user.id == int(ADMIN_ID):
@@ -236,23 +239,23 @@ async def process_delete_by_id(message: types.Message, state: FSMContext):
 async def add_item(message: types.Message):
     # Проверка на то, что пользователь является админом
     if message.from_user.id == int(ADMIN_ID):
-        await NewOrder.coming.set()
+        await NewBus.coming.set()
         await message.answer(f'Введите место прибытия автобуса:')
     else:
         await message.reply('У вас нет прав для выполнения этой команды.')
 
 
 # Добавление автобуса
-@dp.message_handler(state=NewOrder.coming)
+@dp.message_handler(state=NewBus.coming)
 async def add_item_type(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         data['coming'] = message.text
     await message.answer('Напишите цену билета:')
-    await NewOrder.next()
+    await NewBus.next()
 
 
 # Добавление автобуса
-@dp.message_handler(state=NewOrder.price)
+@dp.message_handler(state=NewBus.price)
 async def add_item_type(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         data['price'] = int(message.text)
@@ -272,7 +275,7 @@ async def add_item_type(message: types.Message, state: FSMContext):
             date = md.Schedule(data=f"2024/01/{i}", bus_id=bus_id)
         date.save()
 
-    await message.answer('Товар успешно создан!')
+    await message.answer('Рейс успешно добавлен!')
     await state.finish()
 
 
@@ -315,15 +318,37 @@ async def import_to(message: types.Message):
         await message.reply('У Вас недостаточно прав')
 
 
+# Асинхронная функция для создания резервной копии и загрузки на Яндекс.Диск
+async def upload_backup():
+    os.environ["PGPASSWORD"] = "ruslan46576"
+    os.chdir(r'D:/Program Files/PostgreSQL/bin')
+
+    command = 'pg_dump -h {0} -U {1} -p 5432 -d {2} --file="C:\\Python\\BotTG\\backup.sql" --format=p'.format(
+        "localhost", "postgres", "busstation")
+    p = subprocess.Popen(command, shell=True)
+    p.wait()
+
+    # Загрузка резервной копии на Яндекс.Диск
+    y = yadisk.YaDisk(token="y0_AgAAAAA0sAXgAAsLIQAAAAD14tMCkWyDfpgdRbiUqY8blmvUr8TNDL0")
+    if y.exists(f"/backup.dump"):
+        y.remove(f"/backup.dump")
+
+    y.upload("C:/Users/Akelk/arts_store2/pythonProject/backup.dump", f"/backup.dump")
+
 @dp.message_handler(text='Загрузить на Яндекс Диск')
 async def handle_backup_command(message: types.Message):
+    # Вызов функции создания резервной копии с передачей объекта сообщения
+    await upload_backup()
     if message.from_user.id == int(ADMIN_ID):
-        # Вызов функции создания резервной копии с передачей объекта сообщения
-        await db.upload_backup()
+        await upload_backup()
         await message.answer("Успешно")
     else:
         await message.reply('У Вас недостаточно прав')
 
+async def sheduler():
+    while True:
+        await upload_backup()
+        await asyncio.sleep(60 * 60)
 
 # Если пользователь ввел не команду
 @dp.message_handler()
